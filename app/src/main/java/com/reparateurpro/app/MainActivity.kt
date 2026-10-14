@@ -1,15 +1,27 @@
 package com.reparateurpro.app
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Bundle
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
 import com.google.zxing.integration.android.IntentIntegrator
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import java.io.ByteArrayOutputStream
 
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private val cameraRequestCode = 7301
 
     @Suppress("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,16 +38,67 @@ class MainActivity : Activity() {
         setContentView(web)
     }
 
+    private fun startBarcodeScan() {
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES)
+            .setPrompt("وجّه الكاميرا نحو الباركود أو QR")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
     private inner class BarcodeBridge {
         @JavascriptInterface
         fun scanBarcode() {
             runOnUiThread {
-                IntentIntegrator(this@MainActivity)
-                    .setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES)
-                    .setPrompt("وجّه الكاميرا نحو الباركود")
-                    .setBeepEnabled(false)
-                    .setOrientationLocked(false)
-                    .initiateScan()
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(
+                        this@MainActivity,
+                        arrayOf(Manifest.permission.CAMERA),
+                        cameraRequestCode
+                    )
+                } else {
+                    startBarcodeScan()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun qrPngBase64(text: String): String {
+            return try {
+                val hints = mapOf(
+                    EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                    EncodeHintType.MARGIN to 1
+                )
+                val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 280, 280, hints)
+                val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+                for (x in 0 until matrix.width) {
+                    for (y in 0 until matrix.height) {
+                        bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                    }
+                }
+                val output = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                bitmap.recycle()
+                Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            } catch (_: Exception) {
+                ""
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == cameraRequestCode) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startBarcodeScan()
+            } else {
+                web.evaluateJavascript("if(window.onBarcodeScanError)window.onBarcodeScanError()", null)
             }
         }
     }
