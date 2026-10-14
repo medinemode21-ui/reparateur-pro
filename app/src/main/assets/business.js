@@ -3,8 +3,38 @@ let products=[],purchases=[],sales=[],workers=[],workerPayments=[];
 const bizKeys={products:'rp_products',purchases:'rp_purchases',sales:'rp_sales',workers:'rp_workers',workerPayments:'rp_worker_payments'};
 function readBiz(){try{products=JSON.parse(localStorage.getItem('rp_products')||'[]')}catch(e){products=[]}try{purchases=JSON.parse(localStorage.getItem('rp_purchases')||'[]')}catch(e){purchases=[]}try{sales=JSON.parse(localStorage.getItem('rp_sales')||'[]')}catch(e){sales=[]}try{workers=JSON.parse(localStorage.getItem('rp_workers')||'[]')}catch(e){workers=[]}try{workerPayments=JSON.parse(localStorage.getItem('rp_worker_payments')||'[]')}catch(e){workerPayments=[]}}
 function saveBiz(){localStorage.setItem('rp_products',JSON.stringify(products));localStorage.setItem('rp_purchases',JSON.stringify(purchases));localStorage.setItem('rp_sales',JSON.stringify(sales));localStorage.setItem('rp_workers',JSON.stringify(workers));localStorage.setItem('rp_worker_payments',JSON.stringify(workerPayments));}
-function scanBarcode(target){window._barcodeTarget=target||'productBarcode';if(window.AndroidBarcode&&AndroidBarcode.scanBarcode)AndroidBarcode.scanBarcode();else msg('ماسح الكاميرا متاح داخل تطبيق Android؛ يمكن كتابة الباركود أو استخدام قارئ خارجي.')}
-window.onBarcodeScanned=function(code){if(!code)return;const target=window._barcodeTarget||'productBarcode';$(target).value=code;if(target==='saleBarcode')selectBizBarcode(code);else{const found=products.find(p=>p.barcode===code);if(found)msg('القطعة موجودة: '+found.name)}};
+function scanBarcode(target){
+  window._barcodeTarget=target||'productBarcode';
+  const field=$(window._barcodeTarget);
+  if(!field){msg('تعذر تحديد حقل الباركود. أعد فتح الصفحة وحاول مجددًا.');return}
+  if(!window.AndroidBarcode||typeof window.AndroidBarcode.scanBarcode!=='function'){
+    msg('ماسح الكاميرا غير متاح في هذه النسخة. يمكنك إدخال الباركود يدويًا أو استخدام قارئ خارجي.');
+    return;
+  }
+  try{window.AndroidBarcode.scanBarcode()}
+  catch(err){msg('تعذر تشغيل الكاميرا. أغلق التطبيق وافتحه، ثم تحقق من إذن الكاميرا.')}
+}
+window.onBarcodeScanned=function(code){
+  if(!code)return;
+  const target=window._barcodeTarget||'productBarcode';
+  const field=$(target);
+  if(!field){msg('تمت قراءة الباركود، لكن الحقل المستهدف غير موجود.');return}
+  field.value=String(code).trim();
+  field.dispatchEvent(new Event('input',{bubbles:true}));
+  field.dispatchEvent(new Event('change',{bubbles:true}));
+  if(target==='saleBarcode')selectBizBarcode(field.value);
+  else{
+    const found=products.find(p=>String(p.barcode||'').trim()===field.value);
+    if(found)msg('القطعة موجودة مسبقًا: '+found.name);
+    else msg('تمت قراءة الباركود. أكمل بيانات القطعة ثم احفظها.');
+  }
+};
+window.onBarcodeScanError=function(message){
+  msg(message||'تعذر تشغيل ماسح الباركود. تحقق من إذن الكاميرا ثم حاول مجددًا.');
+};
+window.onBarcodeScanCancelled=function(message){
+  msg(message||'تم إلغاء المسح. يمكنك المحاولة مرة أخرى.');
+};
 function bizSelects(){const options=products.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' · '+esc(p.barcode||'بدون باركود')+' · مخزون '+p.qty+'</option>').join('');['purchaseProduct','saleProduct'].forEach(id=>{const old=$(id).value;$(id).innerHTML=options||'<option value="">أضف قطعة أولًا</option>';if(products.some(p=>p.id===old))$(id).value=old});$('payWorker').innerHTML=workers.map(w=>'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>').join('')||'<option value="">أضف عاملًا أولًا</option>'}
 function selectBizBarcode(code){const p=products.find(x=>String(x.barcode||'').trim()===String(code).trim());if(!p){msg('الباركود غير مسجل؛ أضف القطعة أولًا');return} $('saleProduct').value=p.id;$('salePrice').value=p.price}
 $('saleBarcode').addEventListener('change',()=>selectBizBarcode($('saleBarcode').value));
