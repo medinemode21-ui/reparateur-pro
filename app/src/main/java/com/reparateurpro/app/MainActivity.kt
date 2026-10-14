@@ -46,18 +46,13 @@ class MainActivity : Activity() {
                 .setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES)
                 .setPrompt("وجّه الكاميرا نحو الباركود أو QR")
                 .setBeepEnabled(false)
-                .setOrientationLocked(false)
+                .setOrientationLocked(true)
                 .initiateScan()
         } catch (e: Exception) {
-            val message = org.json.JSONObject.quote(
-                "تعذر فتح الكاميرا: " + (e.localizedMessage ?: "خطأ غير معروف")
+            notifyWeb(
+                "onBarcodeScanError",
+                "تعذر فتح ماسح الباركود: " + (e.localizedMessage ?: "خطأ غير معروف")
             )
-            web.post {
-                web.evaluateJavascript(
-                    "if(window.onBarcodeScanError)window.onBarcodeScanError($message)",
-                    null
-                )
-            }
         }
     }
 
@@ -104,27 +99,36 @@ class MainActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == cameraRequestCode) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            val granted = grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) {
                 startBarcodeScan()
             } else {
-                web.evaluateJavascript(
-                    "if(window.onBarcodeScanError)window.onBarcodeScanError('يرجى السماح باستخدام الكاميرا من إعدادات التطبيق')",
-                    null
-                )
+                notifyWeb("onBarcodeScanError", "لم يُسمح باستخدام الكاميرا. فعّل إذن الكاميرا من إعدادات التطبيق ثم حاول مجددًا.")
+            }
+        }
+    }
+
+    private fun notifyWeb(callback: String, message: String) {
+        if (!::web.isInitialized || isFinishing || isDestroyed) return
+        val safe = org.json.JSONObject.quote(message)
+        web.post {
+            if (!isFinishing && !isDestroyed) {
+                web.evaluateJavascript("if(window.$callback)window.$callback($safe)", null)
             }
         }
     }
 
     @Deprecated("Deprecated in Android API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
-        if (result != null) {
-            val value = result.contents
-            val safe = org.json.JSONObject.quote(value ?: "")
-            web.evaluateJavascript("if(window.onBarcodeScanned)window.onBarcodeScanned($safe)", null)
-            return
-        }
         super.onActivityResult(requestCode, resultCode, data)
+        val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data) ?: return
+        val value = result.contents
+        if (value.isNullOrBlank()) {
+            notifyWeb("onBarcodeScanCancelled", "تم إلغاء المسح. يمكنك المحاولة مرة أخرى.")
+        } else {
+            notifyWeb("onBarcodeScanned", value.trim())
+        }
     }
 
     @Deprecated("Deprecated in Android API")
