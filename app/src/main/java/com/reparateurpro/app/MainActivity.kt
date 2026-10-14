@@ -13,6 +13,7 @@ import android.webkit.WebViewClient
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.integration.android.IntentIntegrator
+import com.journeyapps.barcodescanner.CaptureActivity
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.io.ByteArrayOutputStream
@@ -37,12 +38,27 @@ class MainActivity : Activity() {
     }
 
     private fun startBarcodeScan() {
-        IntentIntegrator(this)
-            .setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES)
-            .setPrompt("وجّه الكاميرا نحو الباركود أو QR")
-            .setBeepEnabled(false)
-            .setOrientationLocked(false)
-            .initiateScan()
+        try {
+            // Force the embedded scanner activity from zxing-android-embedded.
+            // This avoids relying on a separate Barcode Scanner app being installed.
+            IntentIntegrator(this)
+                .setCaptureActivity(CaptureActivity::class.java)
+                .setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES)
+                .setPrompt("وجّه الكاميرا نحو الباركود أو QR")
+                .setBeepEnabled(false)
+                .setOrientationLocked(false)
+                .initiateScan()
+        } catch (e: Exception) {
+            val message = org.json.JSONObject.quote(
+                "تعذر فتح الكاميرا: " + (e.localizedMessage ?: "خطأ غير معروف")
+            )
+            web.post {
+                web.evaluateJavascript(
+                    "if(window.onBarcodeScanError)window.onBarcodeScanError($message)",
+                    null
+                )
+            }
+        }
     }
 
     private inner class BarcodeBridge {
@@ -91,7 +107,10 @@ class MainActivity : Activity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startBarcodeScan()
             } else {
-                web.evaluateJavascript("if(window.onBarcodeScanError)window.onBarcodeScanError()", null)
+                web.evaluateJavascript(
+                    "if(window.onBarcodeScanError)window.onBarcodeScanError('يرجى السماح باستخدام الكاميرا من إعدادات التطبيق')",
+                    null
+                )
             }
         }
     }
