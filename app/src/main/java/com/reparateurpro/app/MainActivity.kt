@@ -10,8 +10,6 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.integration.android.IntentIntegrator
@@ -51,13 +49,8 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun scanBarcode() {
             runOnUiThread {
-                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA)
-                    != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(
-                        this@MainActivity,
-                        arrayOf(Manifest.permission.CAMERA),
-                        cameraRequestCode
-                    )
+                if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA), cameraRequestCode)
                 } else {
                     startBarcodeScan()
                 }
